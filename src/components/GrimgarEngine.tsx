@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NPC_DATABASE, LOOT_TABLES, FIRST_NAMES, TRAITS } from '@/data/grimgar';
-import { Users, Zap, Gift, Heart, DollarSign } from 'lucide-react';
+import { Users, Gift, Heart, DollarSign } from 'lucide-react';
 
 type TabType = 'amnesiac' | 'npcs' | 'loot' | 'grief' | 'economy';
 

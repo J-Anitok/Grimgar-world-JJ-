@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAppStore } from '@/store';
-import { Character, TrainingResult, StatHistoryEntry } from '@/types';
+import { TrainingResult, StatHistoryEntry } from '@/types';
 import { StatDisplay } from './StatDisplay';
 import { TrainingPanel } from './TrainingPanel';
 import { TrainingHistory } from './TrainingHistory';

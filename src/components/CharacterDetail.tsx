@@ -4,6 +4,7 @@ import { TrainingResult, StatHistoryEntry } from '@/types';
 import { StatDisplay } from './StatDisplay';
 import { TrainingPanel } from './TrainingPanel';
 import { TrainingHistory } from './TrainingHistory';
+import { CustomStatCreator } from './CustomStatCreator';
 import { Edit2 } from 'lucide-react';
 
 export const CharacterDetail: React.FC = () => {
@@ -62,6 +63,16 @@ export const CharacterDetail: React.FC = () => {
         value: result.newValue,
         carryBank: result.newCarryBank,
       };
+    } else {
+      // Custom stat
+      const customIndex = updatedChar.customSubStats.findIndex(s => s.name === result.statName);
+      if (customIndex >= 0) {
+        updatedChar.customSubStats[customIndex] = {
+          ...updatedChar.customSubStats[customIndex],
+          value: result.newValue,
+          carryBank: result.newCarryBank,
+        };
+      }
     }
 
     updatedChar.statHistory = [...updatedChar.statHistory, historyEntry];
@@ -119,10 +130,11 @@ export const CharacterDetail: React.FC = () => {
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Stats and Training */}
+        {/* Stats, Training, and Custom Stats Manager */}
         <div className="lg:col-span-2 space-y-6">
           <StatDisplay character={character} />
           <TrainingPanel character={character} onTraining={handleTraining} />
+          <CustomStatCreator />
         </div>
 
         {/* History Sidebar */}

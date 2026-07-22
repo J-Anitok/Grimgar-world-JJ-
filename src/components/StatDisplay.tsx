@@ -1,6 +1,6 @@
 import React from 'react';
 import { Character, StatValue, SubStatValue } from '@/types';
-import { TrendingUp, Edit2, X } from 'lucide-react';
+import { TrendingUp, Edit2 } from 'lucide-react';
 import { useAppStore } from '@/store';
 
 interface StatDisplayProps {

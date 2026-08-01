@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Grimgar Demo (no-build)</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .item { border: 1px solid #ddd; padding: 8px; margin-bottom: 8px }
+  </style>
+</head>
+<body>
+  <h1>Grimgar — No-build Demo</h1>
+  <div>
+    <h2>NPCs (local demo data)</h2>
+    <div id="npc-list"></div>
+    <button id="reset">Reset NPCs</button>
+  </div>
+
+  <div style="margin-top:20px">
+    <h2>Scavenger Roll</h2>
+    <label>Quality multiplier: <input id="quality" type="number" step="0.1" value="1" /></label>
+    <label>Collection attempts: <input id="collection" type="number" min="1" value="1" /></label>
+    <button id="roll">Roll</button>
+    <pre id="roll-out"></pre>
+  </div>
+
+  <script src="./demo.js"></script>
+</body>
+</html>

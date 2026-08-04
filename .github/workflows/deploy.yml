@@ -29,15 +29,38 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build project
         run: npm run build
 
+      - name: Find build output directory
+        id: find_output
+        run: |
+          echo "Searching for common output directories..."
+          if [ -d "dist" ]; then
+            echo "Found dist"
+            echo "path=dist" >> $GITHUB_OUTPUT
+          elif [ -d "build" ]; then
+            echo "Found build"
+            echo "path=build" >> $GITHUB_OUTPUT
+          elif [ -d "out" ]; then
+            echo "Found out"
+            echo "path=out" >> $GITHUB_OUTPUT
+          elif [ -d "public" ]; then
+            echo "Found public"
+            echo "path=public" >> $GITHUB_OUTPUT
+          else
+            echo "No common output directory found; listing repo root for debugging:"
+            ls -la
+            # default to dist so upload step fails visibly (and logs show listing)
+            echo "path=dist" >> $GITHUB_OUTPUT
+          fi
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'dist'
+          path: ${{ steps.find_output.outputs.path }}
 
   deploy:
     needs: build

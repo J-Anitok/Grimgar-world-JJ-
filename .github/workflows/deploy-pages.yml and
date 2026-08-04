@@ -1,0 +1,76 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Normalize build output to dist
+        id: normalize_output
+        run: |
+          echo "Normalizing output into 'dist'..."
+          rm -rf dist || true
+
+          if [ -d "dist" ]; then
+            cp -r dist dist-temp && rm -rf dist && mv dist-temp dist
+            echo "source=dist" >> $GITHUB_OUTPUT
+          elif [ -d "build" ]; then
+            cp -r build dist
+            echo "source=build" >> $GITHUB_OUTPUT
+          elif [ -d "out" ]; then
+            cp -r out dist
+            echo "source=out" >> $GITHUB_OUTPUT
+          elif [ -d "public" ]; then
+            cp -r public dist
+            echo "source=public" >> $GITHUB_OUTPUT
+          else
+            echo "No known output directory found; listing repo root for debugging:"
+            ls -la
+            exit 1
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

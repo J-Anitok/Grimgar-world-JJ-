@@ -1,0 +1,318 @@
+diff --git a/src/pages/ImportExport.tsx b/src/pages/ImportExport.tsx
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/src/pages/ImportExport.tsx
+@@ -0,0 +1,121 @@
++import { useEffect, useState } from "react";
++import * as G from "../data/grimgar";
++
++export default function ImportExport(): JSX.Element {
++  const [npcs, setNpcs] = useState<Record<string, G.NPC>>({});
++  const [players, setPlayers] = useState<G.Player[]>([]);
++
++  useEffect(() => {
++    setNpcs(G.loadNPCsFromStorage());
++    setPlayers(G.loadPlayersFromStorage());
++  }, []);
++
++  function exportAll() {
++    const payload = { npcs, players };
++    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
++    const url = URL.createObjectURL(blob);
++    const a = document.createElement("a");
++    a.href = url;
++    a.download = "grimgar_backup.json";
++    a.click();
++  }
++
++  function importFile(e: React.ChangeEvent<HTMLInputElement>) {
++    const f = e.target.files && e.target.files[0];
++    if (!f) return;
++    const reader = new FileReader();
++    reader.onload = ev => {
++      try {
++        const parsed = JSON.parse(String(ev.target?.result));
++        if (parsed.npcs) {
++          G.saveNPCsToStorage(parsed.npcs);
++          setNpcs(parsed.npcs);
++        }
++        if (parsed.players) {
++          G.savePlayersToStorage(parsed.players);
++          setPlayers(parsed.players);
++        }
++        alert("Imported successfully");
++      } catch (err) {
++        alert("Invalid file");
++      }
++    };
++    reader.readAsText(f);
++  }
++
++  function clearAll() {
++    if (!confirm("Clear ALL NPCs and Players from localStorage? This cannot be undone.")) return;
++    // Use the data module save helpers so we keep consistent keys/format
++    G.saveNPCsToStorage({});
++    G.savePlayersToStorage([]);
++    setNpcs({});
++    setPlayers([]);
++    alert("Cleared");
++  }
++
++  return (
++    <div>
++      <h2>Import / Export & Bulk</h2>
++      <div>
++        <button onClick={exportAll}>Export NPCs & Players (JSON)</button>
++        <input type="file" accept="application/json" onChange={importFile} />
++      </div>
++      <div style={{ marginTop: 12 }}>
++        <button onClick={clearAll} style={{ color: "red" }}>Clear all local data</button>
++      </div>
++      <div style={{ marginTop: 12 }}>
++        <h3>Preview</h3>
++        <div>NPCs: {Object.keys(npcs).length}</div>
++        <div>Players: {players.length}</div>
++      </div>
++    </div>
++  );
++}
++
+diff --git a/scripts/apply-fixes.sh b/scripts/apply-fixes.sh
+new file mode 100755
+index 0000000..2222222
+--- /dev/null
++++ b/scripts/apply-fixes.sh
+@@ -0,0 +1,200 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++echo "Running repo fixes script. This will create .bak backups for edited files."
++
++REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
++cd "$REPO_ROOT"
++
++########################################
++# 1) Append compatibility helpers to src/data/grimgar.ts
++GRIMGAR="src/data/grimgar.ts"
++if [ ! -f "$GRIMGAR" ]; then
++  echo "ERROR: $GRIMGAR not found. Make sure you're running this from the repo root."
++  exit 1
++fi
++
++echo "Backing up $GRIMGAR -> ${GRIMGAR}.bak"
++cp "$GRIMGAR" "${GRIMGAR}.bak"
++
++cat >> "$GRIMGAR" <<'TS'
++
++// ----- Compatibility & helpers for UI (added to fix build errors) -----
++function _normalizeNPCs(npcs: Record<string, NPC>): Record<string, NPC> {
++  for (const id of Object.keys(npcs)) {
++    const npc = npcs[id];
++    if (!npc) continue;
++    // Provide legacy trainingSchedule alias if only trainingScheduleId exists
++    if ((npc as any).trainingSchedule === undefined && (npc as any).trainingScheduleId !== undefined) {
++      (npc as any).trainingSchedule = (npc as any).trainingScheduleId;
++    }
++    // Ensure inventory items have a legacy `price` field (in bronze) to satisfy older UI
++    if (Array.isArray((npc as any).inventory)) {
++      (npc as any).inventory = (npc as any).inventory.map((it: any) => {
++        if (it == null) return it;
++        if (it.price === undefined) {
++          it.price = (typeof it.priceBronze === 'number') ? it.priceBronze : (it.value ? toBronze(it.value, it.currency || 'BRZ') : 0);
++        }
++        return it;
++      });
++    }
++  }
++  return npcs;
++}
++
++export function loadNPCsFromStorage(): Record<string, NPC> {
++  try {
++    const raw = localStorage.getItem(NPC_DB_KEY);
++    if (!raw) return _normalizeNPCs(JSON.parse(JSON.stringify(NPC_DATABASE)));
++    const parsed = JSON.parse(raw) as Record<string, NPC>;
++    return _normalizeNPCs(parsed);
++  } catch {
++    return _normalizeNPCs(JSON.parse(JSON.stringify(NPC_DATABASE)));
++  }
++}
++
++// Backwards-compatible aliases and utilities expected by UI pages:
++export const coinsToBronze = toBronze;
++
++export function parsePriceToBronze(input: unknown): number {
++  if (typeof input === 'number') return Math.round(input);
++  if (!input || typeof input !== 'string') return 0;
++  const s = (input as string).toUpperCase();
++  const gMatch = s.match(/(\d+)\s*GC/);
++  const scMatch = s.match(/(\d+)\s*SC/);
++  const brMatch = s.match(/(\d+)\s*BRZ/);
++  let total = 0;
++  if (gMatch) total += Number(gMatch[1]) * CURRENCY_MULTIPLIER.GC;
++  if (scMatch) total += Number(scMatch[1]) * CURRENCY_MULTIPLIER.SC;
++  if (brMatch) total += Number(brMatch[1]) * CURRENCY_MULTIPLIER.BRZ;
++  // allow plain number strings representing bronze
++  if (total === 0) {
++    const n = parseInt(s.replace(/[^\d]/g, ''), 10);
++    if (!isNaN(n)) total = n;
++  }
++  return total;
++}
++
++export function loadAllPlayers(): Record<string, Player> {
++  const arr = (typeof loadPlayersFromStorage === 'function') ? loadPlayersFromStorage() : [];
++  const map: Record<string, Player> = {};
++  for (const p of arr) if (p && p.id) map[p.id] = p;
++  return map;
++}
++
++// Simple ripple applicator used by the UI: apply a numeric amount to the defined parents on the NPC stats
++export function applyRippleToParents(sub: any, opts: any, npc: NPC) {
++  if (!sub || !sub.parents || !Array.isArray(sub.parents)) return;
++  const amount = Number(opts?.amount ?? 0);
++  if (!amount) return;
++  const parents = sub.parents;
++  const perParent = Math.floor(amount / Math.max(1, parents.length));
++  for (const parentName of parents) {
++    if ((npc.stats as any)[parentName] !== undefined) {
++      (npc.stats as any)[parentName] += perParent;
++    }
++  }
++}
++
++// Compute next threshold for a substat (compat wrapper)
++export function computeNextThresholdForSubstat(sub: any): number {
++  const parentsCount = Array.isArray(sub?.parents) ? sub.parents.length : 0;
++  const value = Number(sub?.value ?? 0);
++  return nextThreshold(value, parentsCount);
++}
++// ----- End compatibility helpers -----
++TS
++
++echo "Appended compatibility helpers to $GRIMGAR"
++
++########################################
++# 2) Rename unused parameter 'statsMap' -> '_statsMap' in src/data/grimgar.ts (safe textual replace)
++echo "Renaming statsMap -> _statsMap in $GRIMGAR"
++sed -i.bak 's/\bstatsMap\b/_statsMap/g' "$GRIMGAR"
++echo "Created backup ${GRIMGAR}.bak from sed rename"
++
++########################################
++# 3) Fix specific component occurrences (conservative)
++# 3a) GrimgarEngine.tsx: replace item.price usage with safe expression for inventory items
++GENGINE="src/components/GrimgarEngine.tsx"
++if [ -f "$GENGINE" ]; then
++  echo "Backing up $GENGINE -> ${GENGINE}.bak"
++  cp "$GENGINE" "${GENGINE}.bak"
++  # Replace direct 'item.price' with '(item as any).price ?? (item as any).priceBronze ?? 0'
++  # Conservative replacement: only replace "item.price" token
++  perl -0777 -pe "s/\\bitem\\.price\\b/\\(item as any\\)\\.price ?? \\(item as any\\)\\.priceBronze ?? 0/g" -i "$GENGINE"
++  echo "Patched $GENGINE (if it existed)"
++else
++  echo "Note: $GENGINE not found, skipping."
++fi
++
++# 3b) GrimgarUI.tsx: trainingSchedule -> trainingScheduleId, add slot: any if anonymous param
++GUI="src/pages/GrimgarUI.tsx"
++if [ -f "$GUI" ]; then
++  echo "Backing up $GUI -> ${GUI}.bak"
++  cp "$GUI" "${GUI}.bak"
++  # Replace `.trainingSchedule` with `.trainingScheduleId` occurrences (conservative)
++  perl -0777 -pe "s/\\btrainingSchedule\\b/trainingScheduleId/g" -i "$GUI"
++  # Add explicit any type for parameter named (slot)
++  perl -0777 -pe "s/\\(slot\\)/\\(slot: any\\)/g" -i "$GUI"
++  echo "Patched $GUI"
++else
++  echo "Note: $GUI not found, skipping."
++fi
++
++# 3c) NPCEditor.tsx: ensure parsePriceToBronze import exists (append import if missing)
++NEDITOR="src/pages/NPCEditor.tsx"
++if [ -f "$NEDITOR" ]; then
++  echo "Backing up $NEDITOR -> ${NEDITOR}.bak"
++  cp "$NEDITOR" "${NEDITOR}.bak"
++  if ! grep -q "parsePriceToBronze" "$NEDITOR"; then
++    # Insert import after the first import from ../data/grimgar if present, otherwise add at top
++    if grep -q "from \"../data/grimgar\"" "$NEDITOR"; then
++      perl -0777 -pe "s/(from \\\"\\.\\.\\/data\\/grimgar\\\";)/\$1\\nimport { parsePriceToBronze } from '\\.\\.\\/data\\/grimgar';/s" -i "$NEDITOR"
++    else
++      sed -i '1s;^;import { parsePriceToBronze } from \"../data/grimgar\";\n;' "$NEDITOR"
++    fi
++    echo "Inserted parsePriceToBronze import into $NEDITOR"
++  else
++    echo "parsePriceToBronze import already present in $NEDITOR"
++  fi
++else
++  echo "Note: $NEDITOR not found, skipping."
++fi
++
++# 3d) SubstatEditor.tsx: add guards and ensure applyRippleToParents import if missing
++SEDITOR="src/pages/SubstatEditor.tsx"
++if [ -f "$SEDITOR" ]; then
++  echo "Backing up $SEDITOR -> ${SEDITOR}.bak"
++  cp "$SEDITOR" "${SEDITOR}.bak"
++  # Add guard change: replace occurrences of 's.parents' with 's.parents ?? []' where safe
++  perl -0777 -pe "s/\\bs\\.parents\\b/s.parents ?? []/g" -i "$SEDITOR"
++  # Ensure computeNextThresholdForSubstat and applyRippleToParents are imported from data
++  if ! grep -q "computeNextThresholdForSubstat" "$SEDITOR"; then
++    if grep -q "from \"../data/grimgar\"" "$SEDITOR"; then
++      perl -0777 -pe "s/(from \\\"\\.\\.\\/data\\/grimgar\\\";)/\$1\\nimport { computeNextThresholdForSubstat, applyRippleToParents } from '\\.\\.\\/data\\/grimgar';/s" -i "$SEDITOR"
++    else
++      sed -i '1s;^;import { computeNextThresholdForSubstat, applyRippleToParents } from \"../data/grimgar\";\n;' "$SEDITOR"
++    fi
++    echo "Inserted computeNextThresholdForSubstat/applyRippleToParents import into $SEDITOR"
++  else
++    echo "computeNextThresholdForSubstat already present in $SEDITOR"
++  fi
++  echo "Patched $SEDITOR"
++else
++  echo "Note: $SEDITOR not found, skipping."
++fi
++
++########################################
++# 4) Remove unused top-level React imports in a few page files (conservative)
++FILES_TO_CHECK=(
++  "src/pages/GrimgarDashboard.tsx"
++  "src/pages/GrimgarUI.tsx"
++  "src/pages/ScheduleBuilder.tsx"
++  "src/pages/NPCEditor.tsx"
++  "src/pages/SubstatEditor.tsx"
++)
++
++for f in "${FILES_TO_CHECK[@]}"; do
++  if [ -f "$f" ]; then
++    echo "Checking top-level React imports in $f"
++    cp "$f" "${f}.bak2"
++    # Remove 'import React from "react";' lines
++    sed -i '/^import React from .react./d' "$f" || true
++    # If a line imports both React and named imports, remove React token only:
++    # e.g. import React, { useEffect } from 'react'; -> import { useEffect } from 'react';
++    perl -0777 -pe "s/import\\s+React\\s*,\\s*\\{([^}]*)\\}\\s*from\\s*('|\")react('|\");/import {\\1} from 'react';/g" -i "$f" || true
++    # If file now has an empty import from 'react', remove it
++    sed -i "/^import\\s*\\{\\s*\\}\\s*from '\\.\\.\\/..*react';/d" "$f" || true
++    echo "Adjusted React imports in $f (backup ${f}.bak2)"
++  fi
++done
++
++echo
++echo "Automatic edits complete. Review the .bak and .bak2 files for backups."
++echo "Next steps (run these commands):"
++cat <<'CMDS'
++  # Inspect changes:
++  git status --porcelain
++  git add -A
++  git commit -m "Apply automated TypeScript compatibility helpers and edits"
++  git push origin HEAD
++
++  # If you want to run the build locally:
++  npm ci
++  npm run build
++
++CMDS
++
++echo
++echo "If the build still fails, copy the first ~20 lines of npm run build or npx tsc --noEmit output here and I'll provide the next fixes."
++echo "Done."
++

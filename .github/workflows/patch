@@ -1,0 +1,31 @@
+*** Begin Patch
+*** Add File: postcss.config.cjs
++module.exports = {
++  plugins: {
++    tailwindcss: {},
++    autoprefixer: {},
++  },
++};
++
+*** End Patch
+*** Begin Patch
+*** Add File: tailwind.config.cjs
++/** @type {import('tailwindcss').Config} */
++module.exports = {
++  content: [
++    "./index.html",
++    "./src/**/*.{js,ts,jsx,tsx}",
++  ],
++  theme: {
++    extend: {
++      colors: {
++        slate: {
++          950: '#0f172a',
++        },
++      },
++    },
++  },
++  plugins: [],
++}
++
+*** End Patch

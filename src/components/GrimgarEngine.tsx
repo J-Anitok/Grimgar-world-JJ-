@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NPC_DATABASE, LOOT_TABLES, FIRST_NAMES, TRAITS } from '@/data/grimgar';
+import { NPC_DATABASE, LOOT_TABLES, FIRST_NAMES, TRAITS, formatMoney } from '@/data/grimgar';
 import { Users, Gift, Heart, DollarSign } from 'lucide-react';
 
 type TabType = 'amnesiac' | 'npcs' | 'loot' | 'grief' | 'economy';
@@ -230,7 +230,7 @@ export const GrimgarEngine: React.FC = () => {
                     {NPC_DATABASE[selectedNPC].inventory.map((item, idx) => (
                       <div key={idx} className="bg-slate-800 p-3 rounded">
                         <p className="font-semibold text-green-300">{item.item}</p>
-                        <p className="text-slate-400 text-sm">Price: {item.price}</p>
+                        <p className="text-slate-400 text-sm">Price: {formatMoney(item.priceBronze)}</p>
                         <p className="text-slate-300 text-sm italic">📖 {item.lore}</p>
                       </div>
                     ))}

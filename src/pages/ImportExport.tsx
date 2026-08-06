@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import * as G from "../data/grimgar";
 
 export default function ImportExport(): JSX.Element {
@@ -7,7 +7,7 @@ export default function ImportExport(): JSX.Element {
 
   useEffect(() => {
     setNpcs(G.loadNPCsFromStorage());
-    setPlayers(G.loadPlayersFromStorage ? Object.values(G.loadAllPlayers ? G.loadAllPlayers() : {}) : []);
+    setPlayers(G.loadPlayersFromStorage());
   }, []);
 
   function exportAll() {

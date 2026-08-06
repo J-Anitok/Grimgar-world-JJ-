@@ -80,6 +80,70 @@ export function nextThreshold(value: number, parentsCount: number): number {
   return nextTierValue * cfg.multiplier;
 }
 
+/* ---- Compatibility helpers (restored for UI pages) ---- */
+// Compatibility helper: accept an object of coins { bronze?, silver?, gold? }
+export function coinsToBronze(coins: { bronze?: number; silver?: number; gold?: number }): number {
+  return (coins.bronze || 0) + toBronze(coins.silver || 0, "SC") + toBronze(coins.gold || 0, "GC");
+}
+
+// Parse a human price string into bronze. Accepts "2 GC 34 SC 50 BRZ", "15 SC", "1500", etc.
+export function parsePriceToBronze(raw: string): number {
+  if (!raw) return 0;
+  const s = String(raw).replace(/,/g, "").toUpperCase();
+  let total = 0;
+  const gc = /([0-9]+)\s*GC/.exec(s);
+  if (gc) total += toBronze(Number(gc[1]), "GC");
+  const sc = /([0-9]+)\s*SC/.exec(s);
+  if (sc) total += toBronze(Number(sc[1]), "SC");
+  const br = /([0-9]+)\s*BRZ/.exec(s);
+  if (br) total += Number(br[1]);
+  if (total === 0) {
+    // fallback: parse plain number as bronze
+    const n = parseInt(s.trim(), 10);
+    if (!isNaN(n)) total = n;
+  }
+  return total;
+}
+
+// Small wrapper to compute next threshold for a substat object used by the UI
+export function computeNextThresholdForSubstat(s: StatDef): number {
+  const parentsCount = s.parents ? s.parents.length : 0;
+  return nextThreshold(s.value, parentsCount);
+}
+
+// Simple compatibility ripple function used by the UI editor pages.
+export function applyRippleToParents(sub: StatDef, cfg: { amount?: number; percentToParents?: number; distributeAcrossParents?: boolean; coreRipple?: boolean }, npc: NPC) {
+  if (!sub || !sub.parents || sub.parents.length === 0) return;
+  const amount = cfg.amount ?? 0;
+
+  // if percentToParents provided, treat amount as a base and multiply by the percent
+  if (cfg.percentToParents) {
+    if (cfg.distributeAcrossParents) {
+      const per = (amount * cfg.percentToParents) / sub.parents.length;
+      for (const p of sub.parents) {
+        if (!npc.substats) npc.substats = {};
+        if (!npc.substats[p]) npc.substats[p] = { name: p, parents: [], value: 0 };
+        npc.substats[p].value += per;
+      }
+    } else {
+      for (const p of sub.parents) {
+        if (!npc.substats) npc.substats = {};
+        if (!npc.substats[p]) npc.substats[p] = { name: p, parents: [], value: 0 };
+        npc.substats[p].value += amount * cfg.percentToParents;
+      }
+    }
+    return;
+  }
+
+  // fallback: split amount equally across parents
+  const per = amount / sub.parents.length;
+  for (const p of sub.parents) {
+    if (!npc.substats) npc.substats = {};
+    if (!npc.substats[p]) npc.substats[p] = { name: p, parents: [], value: 0 };
+    npc.substats[p].value += per;
+  }
+}
+
 /* ---- Ripple configuration and application ---- */
 export interface RippleConfig {
   // Either percentage (0..1) of change to propagate, or absolute value.
@@ -348,7 +412,7 @@ export interface TrainingSchedule {
   npcIds?: string[];
 }
 
-export function runTrainingSessionForNPC(npc: NPC, session: TrainingSession, statsMap: Record<string, StatDef>) {
+export function runTrainingSessionForNPC(npc: NPC, session: TrainingSession) {
   // Apply stat deltas to NPC.stats if their stat names match; we assume stat keys match STR/DEX etc.
   for (const [statName, delta] of Object.entries(session.statDeltas)) {
     if ((npc.stats as any)[statName] !== undefined) {
@@ -358,12 +422,12 @@ export function runTrainingSessionForNPC(npc: NPC, session: TrainingSession, sta
   }
 }
 
-export function trainSelected(npcs: Record<string, NPC>, schedule: TrainingSchedule, selectedNpcIds: string[], statsMap: Record<string, StatDef>) {
+export function trainSelected(npcs: Record<string, NPC>, schedule: TrainingSchedule, selectedNpcIds: string[]) {
   for (const id of selectedNpcIds) {
     const npc = npcs[id];
     if (!npc) continue;
     for (const s of schedule.sessions) {
-      runTrainingSessionForNPC(npc, s, statsMap);
+      runTrainingSessionForNPC(npc, s);
     }
   }
 }
